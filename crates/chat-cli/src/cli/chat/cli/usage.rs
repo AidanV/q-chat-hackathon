@@ -29,6 +29,8 @@ pub enum UsageSubcommand {
     Graph,
     /// Ask the AI model to provide a funny equivalent for one of your usage statistics
     Summarize,
+    /// Get personalized suggestions for offsetting your environmental impact
+    Offset,
 }
 
 impl UsageArgs {
@@ -36,6 +38,7 @@ impl UsageArgs {
         match self.command {
             Some(UsageSubcommand::Graph) => self.execute_graph(os, session).await,
             Some(UsageSubcommand::Summarize) => self.execute_summarize(os, session).await,
+            Some(UsageSubcommand::Offset) => self.execute_offset(os, session).await,
             None => self.execute_default(os, session).await,
         }
     }
@@ -384,6 +387,29 @@ impl UsageArgs {
         Ok(ChatState::HandleInput { input: prompt })
     }
 
+    async fn execute_offset(self, os: &Os, session: &mut ChatSession) -> Result<ChatState, ChatError> {
+        // Get today's usage statistics (same as summarize)
+        let usage_summary = session.conversation.usage_summary(os);
+
+        // Generate offset suggestions prompt
+        let prompt = format!(
+            "Based on my Amazon Q usage statistics: {},
+            please provide 3-5 creative, actionable, and realistic suggestions for offsetting
+            my environmental impact today. Make suggestions:
+            - Specific and measurable
+            - Achievable within a day
+            - Relatable to a developer's lifestyle
+            - Include both digital and physical actions
+            - Show approximate CO2 offset amounts when relevant
+
+            Format as a friendly, encouraging list with emojis.",
+            serde_json::to_string_pretty(&usage_summary).unwrap_or_default()
+        );
+
+        // Return a ChatState that will process this prompt as user input (same as summarize)
+        Ok(ChatState::HandleInput { input: prompt })
+    }
+
     async fn execute_default(self, os: &Os, session: &mut ChatSession) -> Result<ChatState, ChatError> {
         let state = session
             .conversation
@@ -592,6 +618,7 @@ impl UsageArgs {
         match &self.command {
             Some(UsageSubcommand::Graph) => Some("graph"),
             Some(UsageSubcommand::Summarize) => Some("summarize"),
+            Some(UsageSubcommand::Offset) => Some("offset"),
             None => None,
         }
     }
