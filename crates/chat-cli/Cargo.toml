@@ -87,6 +87,7 @@ rustls.workspace = true
 rustls-native-certs.workspace = true
 rustls-pemfile.workspace = true
 rustyline.workspace = true
+prompt_condensor = { path = "../prompt_condensor" }
 semantic_search_client.workspace = true
 semver.workspace = true
 serde.workspace = true

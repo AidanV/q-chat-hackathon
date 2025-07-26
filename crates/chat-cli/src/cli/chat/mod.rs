@@ -64,6 +64,18 @@ use crate::auth::AuthError;
 use crate::auth::builder_id::is_idc_user;
 use crate::cli::agent::Agents;
 use crate::cli::chat::cli::SlashCommand;
+use prompt_condensor::{CompressionPipeline, CompressionConfig};
+
+/// Statistics tracking for compression over a chat session
+#[derive(Debug, Default)]
+pub struct CompressionStats {
+    total_prompts: usize,
+    total_original_tokens: usize,
+    total_compressed_tokens: usize,
+    total_co2_saved: f32,
+    total_energy_saved: f32,
+    total_cost_saved: f32,
+}
 use crate::cli::chat::cli::model::{MODEL_OPTIONS, default_model_id};
 use crate::cli::chat::cli::prompts::{GetPromptError, PromptsSubcommand};
 use crate::database::settings::Setting;
@@ -461,6 +473,10 @@ pub struct ChatSession {
     ctrlc_rx: broadcast::Receiver<()>,
     /// Whether prompt compression is enabled for this session
     compression_enabled: bool,
+    /// Compression pipeline for prompt optimization
+    compression_pipeline: CompressionPipeline,
+    /// Compression statistics for this session
+    compression_stats: CompressionStats,
 }
 
 impl ChatSession {
@@ -582,6 +598,8 @@ impl ChatSession {
             inner: Some(ChatState::default()),
             ctrlc_rx,
             compression_enabled: false, // Default to disabled
+            compression_pipeline: CompressionPipeline::new(CompressionConfig::default()),
+            compression_stats: CompressionStats::default(),
         })
     }
 
@@ -590,9 +608,129 @@ impl ChatSession {
         self.compression_enabled = enabled;
     }
 
+    /// Update compression configuration
+    pub fn update_compression_config(&mut self, config: CompressionConfig) {
+        self.compression_pipeline.update_config(config);
+    }
+
+    /// Get compression statistics for this session
+    pub fn get_compression_stats(&self) -> &CompressionStats {
+        &self.compression_stats
+    }
+
     /// Get whether prompt compression is enabled for this session
     pub fn is_compression_enabled(&self) -> bool {
         self.compression_enabled
+    }
+
+    /// Compress a prompt and return the result with metrics
+    pub fn compress_prompt(&self, prompt: &str) -> Result<prompt_condensor::CompressionResult, prompt_condensor::CompressionError> {
+        if !self.compression_enabled {
+            // If compression is disabled, return the original prompt with no compression
+            let original_tokens = prompt_condensor::metrics::count_tokens(prompt);
+            return Ok(prompt_condensor::CompressionResult::new(
+                prompt,
+                prompt.to_string(),
+                original_tokens,
+                original_tokens,
+                100.0, // Perfect similarity since no compression
+            ));
+        }
+        
+        self.compression_pipeline.compress(prompt)
+    }
+
+    /// Display compression preview to the user
+    pub fn show_compression_preview(&mut self, prompt: &str) -> Result<String, ChatError> {
+        if !self.compression_enabled {
+            return Ok(prompt.to_string());
+        }
+
+        match self.compress_prompt(prompt) {
+            Ok(result) => {
+                // Update compression statistics
+                self.compression_stats.total_prompts += 1;
+                self.compression_stats.total_original_tokens += result.original_tokens;
+                self.compression_stats.total_compressed_tokens += result.compressed_tokens;
+                self.compression_stats.total_co2_saved += result.energy_savings.co2_grams;
+                self.compression_stats.total_energy_saved += result.energy_savings.watthours;
+                self.compression_stats.total_cost_saved += result.energy_savings.dollars;
+                // Only show preview if there's meaningful compression
+                if result.compression_ratio > 5.0 {
+                    // Show compression metrics with nice formatting
+                    execute!(
+                        self.stderr,
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print("┌─ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Green),
+                        crossterm::style::Print("🌱 Compression Preview"),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print(" ─────────────────────────────────────────────────\n"),
+                        crossterm::style::Print("│ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Cyan),
+                        crossterm::style::Print(format!("📊 {} → {} tokens", result.original_tokens, result.compressed_tokens)),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print(" │ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Green),
+                        crossterm::style::Print(format!("{:.1}% reduction", result.compression_ratio)),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print(" │ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Yellow),
+                        crossterm::style::Print(format!("{:.1}% similarity", result.similarity_score)),
+                        crossterm::style::Print("\n"),
+                        crossterm::style::Print("│ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Green),
+                        crossterm::style::Print(format!("💚 {:.2}g CO2 saved", result.energy_savings.co2_grams)),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print(" │ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Blue),
+                        crossterm::style::Print(format!("{:.2}Wh energy", result.energy_savings.watthours)),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print(" │ "),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Magenta),
+                        crossterm::style::Print(format!("${:.4} saved", result.energy_savings.dollars)),
+                        crossterm::style::Print("\n"),
+                        crossterm::style::Print("└─────────────────────────────────────────────────────────────────────────\n"),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Reset)
+                    )?;
+
+                    // Show compressed prompt preview if significantly different
+                    if result.compression_ratio > 15.0 && result.compressed_text != prompt {
+                        execute!(
+                            self.stderr,
+                            crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                            crossterm::style::Print("💡 Sending compressed version: "),
+                            crossterm::style::SetForegroundColor(crossterm::style::Color::Green),
+                            crossterm::style::Print(&result.compressed_text),
+                            crossterm::style::SetForegroundColor(crossterm::style::Color::Reset),
+                            crossterm::style::Print("\n\n")
+                        )?;
+                    } else {
+                        execute!(self.stderr, crossterm::style::Print("\n"))?;
+                    }
+                } else {
+                    // Minimal compression, just show a small indicator
+                    execute!(
+                        self.stderr,
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::DarkGrey),
+                        crossterm::style::Print(format!("🌱 {:.1}% compression | {:.2}g CO2 saved\n", result.compression_ratio, result.energy_savings.co2_grams)),
+                        crossterm::style::SetForegroundColor(crossterm::style::Color::Reset)
+                    )?;
+                }
+
+                Ok(result.compressed_text)
+            }
+            Err(e) => {
+                // Show compression error but continue with original prompt
+                execute!(
+                    self.stderr,
+                    crossterm::style::SetForegroundColor(crossterm::style::Color::Yellow),
+                    crossterm::style::Print(format!("⚠️  Compression failed: {} - using original prompt\n", e)),
+                    crossterm::style::SetForegroundColor(crossterm::style::Color::Reset)
+                )?;
+                Ok(prompt.to_string())
+            }
+        }
     }
 
     pub async fn next(&mut self, os: &mut Os) -> Result<(), ChatError> {
@@ -1697,7 +1835,17 @@ impl ChatSession {
                 };
                 self.conversation.abandon_tool_use(&self.tool_uses, user_input);
             } else {
-                self.conversation.set_next_user_message(user_input).await;
+                // Apply compression preview if enabled
+                let final_user_input = if self.compression_enabled {
+                    match self.show_compression_preview(&user_input) {
+                        Ok(compressed_input) => compressed_input,
+                        Err(_) => user_input, // Fall back to original on error
+                    }
+                } else {
+                    user_input
+                };
+                
+                self.conversation.set_next_user_message(final_user_input).await;
             }
 
             self.reset_user_turn();

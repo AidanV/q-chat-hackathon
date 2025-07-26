@@ -1272,6 +1272,7 @@ dependencies = [
  "plotters-backend",
  "predicates",
  "prettyplease",
+ "prompt_condensor",
  "quote",
  "r2d2",
  "r2d2_sqlite",
@@ -4951,6 +4952,19 @@ dependencies = [
  "bitflags 2.9.1",
  "chrono",
  "hex",
+]
+
+[[package]]
+name = "prompt_condensor"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "unicode-segmentation",
 ]
 
 [[package]]
