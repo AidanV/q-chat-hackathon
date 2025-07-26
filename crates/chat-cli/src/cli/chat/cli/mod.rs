@@ -154,6 +154,7 @@ impl SlashCommand {
             SlashCommand::Knowledge(sub) => Some(sub.name()),
             SlashCommand::Tools(arg) => arg.subcommand_name(),
             SlashCommand::Prompts(arg) => arg.subcommand_name(),
+            SlashCommand::Usage(arg) => arg.subcommand_name(),
             _ => None,
         }
     }

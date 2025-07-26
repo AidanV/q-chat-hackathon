@@ -123,6 +123,9 @@ winnow.workspace = true
 schemars.workspace = true
 jsonschema.workspace = true
 chrono.workspace = true
+ratatui = "0.24"
+plotters = "0.3"
+plotters-backend = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
