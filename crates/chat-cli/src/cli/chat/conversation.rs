@@ -1,64 +1,29 @@
-use std::collections::{
-    HashMap,
-    HashSet,
-    VecDeque,
-};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Write;
 use std::sync::atomic::Ordering;
 
+use chrono::{Datelike, Local};
 use crossterm::style::Color;
-use crossterm::{
-    execute,
-    style,
-};
-use serde::{
-    Deserialize,
-    Serialize,
-};
-use tracing::{
-    debug,
-    warn,
-};
+use crossterm::{execute, style};
+use serde::{Deserialize, Serialize};
+use tracing::{debug, warn};
 
 use super::cli::compact::CompactStrategy;
-use super::consts::{
-    DUMMY_TOOL_NAME,
-    MAX_CHARS,
-    MAX_CONVERSATION_STATE_HISTORY_LEN,
-};
+use super::consts::{DUMMY_TOOL_NAME, MAX_CHARS, MAX_CONVERSATION_STATE_HISTORY_LEN};
 use super::context::ContextManager;
-use super::message::{
-    AssistantMessage,
-    ToolUseResult,
-    UserMessage,
-};
+use super::message::{AssistantMessage, ToolUseResult, UserMessage};
 use super::parser::RequestMetadata;
-use super::token_counter::{
-    CharCount,
-    CharCounter,
-};
+use super::token_counter::{CharCount, CharCounter};
 use super::tool_manager::ToolManager;
-use super::tools::{
-    InputSchema,
-    QueuedTool,
-    ToolOrigin,
-    ToolSpec,
-};
+use super::tools::{InputSchema, QueuedTool, ToolOrigin, ToolSpec};
 use super::util::serde_value_to_document;
 use crate::api_client::model::{
-    ChatMessage,
-    ConversationState as FigConversationState,
-    ImageBlock,
-    Tool,
-    ToolInputSchema,
-    ToolSpecification,
+    ChatMessage, ConversationState as FigConversationState, ImageBlock, Tool, ToolInputSchema, ToolSpecification,
     UserInputMessage,
 };
+use crate::cli::UsageStatistics;
 use crate::cli::agent::Agents;
-use crate::cli::agent::hook::{
-    Hook,
-    HookTrigger,
-};
+use crate::cli::agent::hook::{Hook, HookTrigger};
 use crate::cli::chat::ChatError;
 use crate::mcp_client::Prompt;
 use crate::os::Os;
@@ -153,6 +118,10 @@ impl ConversationState {
         self.latest_summary.as_ref().map(|(s, _)| s.as_str())
     }
 
+    pub fn usage_summary(&self, os: &Os) -> UsageStatistics {
+        self.get_total_usage_stats(os)
+    }
+
     pub fn history(&self) -> &VecDeque<HistoryEntry> {
         &self.history
     }
@@ -224,6 +193,15 @@ impl ConversationState {
         self.next_message = Some(msg);
     }
 
+    pub fn get_last_usage_stats(&self) -> UsageStatistics {
+        return UsageStatistics::new(1., 0.1, 2.);
+    }
+
+    pub fn get_total_usage_stats(&self, os: &Os) -> UsageStatistics {
+        let day = Local::now().day();
+        os.database.get_usage_by_date(day).unwrap().unwrap()
+    }
+
     /// Sets the response message according to the currently set [Self::next_message].
     pub fn push_assistant_message(
         &mut self,
@@ -240,6 +218,10 @@ impl ConversationState {
             assistant: message,
             request_metadata,
         });
+
+        let _ = os
+            .database
+            .add_usage_by_date(Local::now().day(), &self.get_last_usage_stats());
 
         if let Ok(cwd) = std::env::current_dir() {
             os.database.set_conversation_by_path(cwd, self).ok();
@@ -931,14 +913,8 @@ fn enforce_tool_use_history_invariants(history: &mut VecDeque<HistoryEntry>, too
 mod tests {
     use super::super::message::AssistantToolUse;
     use super::*;
-    use crate::api_client::model::{
-        AssistantResponseMessage,
-        ToolResultStatus,
-    };
-    use crate::cli::agent::{
-        Agent,
-        Agents,
-    };
+    use crate::api_client::model::{AssistantResponseMessage, ToolResultStatus};
+    use crate::cli::agent::{Agent, Agents};
     use crate::cli::chat::tool_manager::ToolManager;
 
     const AMAZONQ_FILENAME: &str = "AmazonQ.md";
@@ -1087,12 +1063,16 @@ mod tests {
 
             conversation.push_assistant_message(
                 &mut os,
-                AssistantMessage::new_tool_use(None, i.to_string(), vec![AssistantToolUse {
-                    id: "tool_id".to_string(),
-                    name: "tool name".to_string(),
-                    args: serde_json::Value::Null,
-                    ..Default::default()
-                }]),
+                AssistantMessage::new_tool_use(
+                    None,
+                    i.to_string(),
+                    vec![AssistantToolUse {
+                        id: "tool_id".to_string(),
+                        name: "tool name".to_string(),
+                        args: serde_json::Value::Null,
+                        ..Default::default()
+                    }],
+                ),
                 None,
             );
             conversation.add_tool_results(vec![ToolUseResult {
@@ -1115,12 +1095,16 @@ mod tests {
             if i % 3 == 0 {
                 conversation.push_assistant_message(
                     &mut os,
-                    AssistantMessage::new_tool_use(None, i.to_string(), vec![AssistantToolUse {
-                        id: "tool_id".to_string(),
-                        name: "tool name".to_string(),
-                        args: serde_json::Value::Null,
-                        ..Default::default()
-                    }]),
+                    AssistantMessage::new_tool_use(
+                        None,
+                        i.to_string(),
+                        vec![AssistantToolUse {
+                            id: "tool_id".to_string(),
+                            name: "tool name".to_string(),
+                            args: serde_json::Value::Null,
+                            ..Default::default()
+                        }],
+                    ),
                     None,
                 );
                 conversation.add_tool_results(vec![ToolUseResult {

@@ -1,48 +1,19 @@
 use std::sync::Arc;
-use std::time::{
-    Duration,
-    Instant,
-    SystemTime,
-    UNIX_EPOCH,
-};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use eyre::Result;
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::sync::{
-    Mutex,
-    mpsc,
-};
+use tokio::sync::{Mutex, mpsc};
 use tokio_util::sync::CancellationToken;
-use tracing::{
-    debug,
-    error,
-    info,
-    trace,
-    warn,
-};
+use tracing::{debug, error, info, trace, warn};
 
-use super::message::{
-    AssistantMessage,
-    AssistantToolUse,
-};
-use crate::api_client::model::{
-    ChatResponseStream,
-    ConversationState,
-};
+use super::message::{AssistantMessage, AssistantToolUse};
+use crate::api_client::model::{ChatResponseStream, ConversationState};
 use crate::api_client::send_message_output::SendMessageOutput;
-use crate::api_client::{
-    ApiClient,
-    ApiClientError,
-};
+use crate::api_client::{ApiClient, ApiClientError};
 use crate::telemetry::ReasonCode;
-use crate::telemetry::core::{
-    ChatConversationType,
-    MessageMetaTag,
-};
+use crate::telemetry::core::{ChatConversationType, MessageMetaTag};
 
 /// Error from sending a SendMessage request.
 #[derive(Debug, Error)]

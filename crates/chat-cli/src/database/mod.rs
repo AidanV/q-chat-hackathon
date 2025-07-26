@@ -2,43 +2,27 @@ pub mod settings;
 
 use std::ops::Deref;
 use std::path::Path;
-use std::str::FromStr;
+use std::str::{FromStr, Utf8Error};
 use std::sync::PoisonError;
 
 use aws_sdk_cognitoidentity::primitives::DateTimeFormat;
 use aws_sdk_cognitoidentity::types::Credentials;
+use chrono::{Datelike, Local};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::FromSql;
-use rusqlite::{
-    Connection,
-    Error,
-    ToSql,
-    params,
-};
+use rusqlite::{Connection, Error, ToSql, params};
 use serde::de::DeserializeOwned;
-use serde::{
-    Deserialize,
-    Serialize,
-};
-use serde_json::{
-    Map,
-    Value,
-};
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 use settings::Settings;
 use thiserror::Error;
-use tracing::{
-    error,
-    info,
-    trace,
-};
+use tracing::{error, info, trace};
 use uuid::Uuid;
 
 use crate::cli::ConversationState;
-use crate::util::directories::{
-    DirectoryError,
-    database_path,
-};
+use crate::cli::UsageStatistics;
+use crate::util::directories::{DirectoryError, database_path};
 
 macro_rules! migrations {
     ($($name:expr),*) => {{
@@ -70,7 +54,8 @@ const MIGRATIONS: &[Migration] = migrations![
     "004_state_table",
     "005_auth_table",
     "006_make_state_blob",
-    "007_conversations_table"
+    "007_conversations_table",
+    "008_usage_table"
 ];
 
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -160,6 +145,8 @@ pub enum Table {
     Conversations,
     /// The auth table contains SSO and Builder ID credentials.
     Auth,
+    ///
+    Usages,
 }
 
 impl std::fmt::Display for Table {
@@ -168,6 +155,7 @@ impl std::fmt::Display for Table {
             Table::State => write!(f, "state"),
             Table::Conversations => write!(f, "conversations"),
             Table::Auth => write!(f, "auth_kv"),
+            Table::Usages => write!(f, "usages"),
         }
     }
 }
@@ -240,14 +228,18 @@ impl Database {
 
     /// Set cognito credentials used by toolkit telemetry.
     pub fn set_credentials_entry(&mut self, credentials: &Credentials) -> Result<usize, DatabaseError> {
-        self.set_json_entry(Table::State, CREDENTIALS_KEY, CredentialsJson {
-            access_key_id: credentials.access_key_id.clone(),
-            secret_key: credentials.secret_key.clone(),
-            session_token: credentials.session_token.clone(),
-            expiration: credentials
-                .expiration
-                .and_then(|t| t.fmt(DateTimeFormat::DateTime).ok()),
-        })
+        self.set_json_entry(
+            Table::State,
+            CREDENTIALS_KEY,
+            CredentialsJson {
+                access_key_id: credentials.access_key_id.clone(),
+                secret_key: credentials.secret_key.clone(),
+                session_token: credentials.session_token.clone(),
+                expiration: credentials
+                    .expiration
+                    .and_then(|t| t.fmt(DateTimeFormat::DateTime).ok()),
+            },
+        )
     }
 
     /// Get the current user profile used to determine API endpoints.
@@ -353,6 +345,25 @@ impl Database {
         };
 
         self.set_json_entry(Table::Conversations, path, state)
+    }
+
+    /// Set a chat conversation given a path to the conversation.
+    pub fn add_usage_by_date(&mut self, day: u32, state: &UsageStatistics) -> Result<usize, DatabaseError> {
+        // We would need to encode this to support non utf8 paths.
+
+        let usage: UsageStatistics = self
+            .get_json_entry(Table::Usages, day.to_string())?
+            .ok_or(DatabaseError::DbOpenError(DbOpenError("problem".into())))
+            .unwrap_or_default();
+
+        self.set_json_entry(Table::Usages, day.to_string(), state.clone() + usage)
+    }
+
+    /// Get a chat conversation given a path to the conversation.
+    pub fn get_usage_by_date(&self, day: u32) -> Result<Option<UsageStatistics>, DatabaseError> {
+        // We would need to encode this to support non utf8 paths.
+
+        self.get_json_entry(Table::Usages, day.to_string())
     }
 
     pub async fn get_secret(&self, key: &str) -> Result<Option<Secret>, DatabaseError> {

@@ -1,24 +1,10 @@
 use clap::Args;
-use crossterm::style::{
-    Attribute,
-    Color,
-};
-use crossterm::{
-    execute,
-    queue,
-    style,
-};
+use crossterm::style::{Attribute, Color};
+use crossterm::{execute, queue, style};
 
 use crate::cli::chat::consts::CONTEXT_WINDOW_SIZE;
-use crate::cli::chat::token_counter::{
-    CharCount,
-    TokenCount,
-};
-use crate::cli::chat::{
-    ChatError,
-    ChatSession,
-    ChatState,
-};
+use crate::cli::chat::token_counter::{CharCount, TokenCount};
+use crate::cli::chat::{ChatError, ChatSession, ChatState};
 use crate::os::Os;
 #[deny(missing_docs)]
 #[derive(Debug, PartialEq, Args)]
@@ -158,7 +144,7 @@ impl UsageArgs {
                 (context_token_count.value() as f32 / CONTEXT_WINDOW_SIZE as f32) * 100.0
             )),
             style::SetForegroundColor(Color::DarkRed),
-            style::Print("█ Tools:    "),
+            style::Print("█ Tools:       "),
             style::SetForegroundColor(Color::Reset),
             style::Print(format!(
                 " ~{} tokens ({:.2}%)\n",
@@ -181,6 +167,21 @@ impl UsageArgs {
                 user_token_count,
                 (user_token_count.value() as f32 / CONTEXT_WINDOW_SIZE as f32) * 100.0
             )),
+        )?;
+
+        let a = session.conversation.usage_summary(os);
+
+        queue!(
+            session.stderr,
+            style::SetAttribute(Attribute::Bold),
+            style::Print("Resources used:\n"),
+            style::SetAttribute(Attribute::Reset),
+            style::Print(format!("⚡ Energy used: \t{}Wh", a.watthours)),
+            style::Print("\n"),
+            style::Print(format!("🌍 CO2 emited:  \t{}g", a.co2)),
+            style::Print("\n"),
+            style::Print(format!("💧 Water used:  \t{}oz", a.water)),
+            style::Print("\n\n"),
         )?;
 
         queue!(
