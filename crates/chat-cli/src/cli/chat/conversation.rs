@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Write;
 use std::sync::atomic::Ordering;
 
-use chrono::{Datelike, Local, NaiveDate};
-use crossterm::style::Color;
-use crossterm::{execute, style};
+use crossterm::{
+    execute,
+    style::{self, Color},
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
 

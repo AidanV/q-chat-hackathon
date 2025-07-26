@@ -68,21 +68,33 @@ impl UsageArgs {
         usage_data: &[(u32, crate::cli::UsageStatistics)],
         session: &mut ChatSession,
     ) -> Result<(), ChatError> {
-        // Prepare data for the chart
-
+        // Prepare data for all four metrics
         let cost_data: Vec<(f64, f64)> = usage_data.iter().map(|c| (c.0 as f64, c.1.dollars as f64)).collect();
+        let energy_data: Vec<(f64, f64)> = usage_data.iter().map(|c| (c.0 as f64, c.1.watthours as f64)).collect();
+        let co2_data: Vec<(f64, f64)> = usage_data.iter().map(|c| (c.0 as f64, c.1.co2 as f64)).collect();
+        let water_data: Vec<(f64, f64)> = usage_data.iter().map(|c| (c.0 as f64, c.1.water as f64)).collect();
+
+        // Calculate max values for each metric
         let max_cost = cost_data
             .iter()
             .map(|c| c.1)
             .max_by(|a, b| a.total_cmp(b))
-            .unwrap_or_else(|| 0.);
-
-        // let energy_data: Vec<(f64, f64)> = usage_data.iter().map(|c| (c.0 as f64, c.1.watthours as f64)).collect();
-        // let max_energy = energy_data
-        //     .iter()
-        //     .map(|c| c.1)
-        //     .max_by(|a, b| a.total_cmp(b))
-        //     .unwrap_or_else(|| 0.);
+            .unwrap_or(0.0);
+        let max_energy = energy_data
+            .iter()
+            .map(|c| c.1)
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0);
+        let max_co2 = co2_data
+            .iter()
+            .map(|c| c.1)
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0);
+        let max_water = water_data
+            .iter()
+            .map(|c| c.1)
+            .max_by(|a, b| a.total_cmp(b))
+            .unwrap_or(0.0);
 
         // Set up terminal
         let backend = CrosstermBackend::new(io::stderr());
@@ -103,31 +115,50 @@ impl UsageArgs {
         let result = terminal.draw(|f| {
             let size = f.size();
 
-            // Create the chart
-            let datasets = vec![
-                Dataset::default()
-                    .name("Daily Cost ($)")
-                    .marker(symbols::Marker::Braille)
-                    .style(Style::default().fg(RatatuiColor::Cyan))
-                    .graph_type(GraphType::Line)
-                    .data(&cost_data),
-                // Dataset::default()
-                //     .name("Energy Used (Wh)")
-                //     .marker(symbols::Marker::Braille)
-                //     .style(Style::default().fg(RatatuiColor::Yellow))
-                //     .graph_type(GraphType::Line)
-                //     .data(&energy_data),
-            ];
+            // Split the terminal into 4 quadrants for the histograms
+            let chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .constraints([
+                    ratatui::layout::Constraint::Percentage(50),
+                    ratatui::layout::Constraint::Percentage(50),
+                ])
+                .split(size);
+
+            let top_chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Horizontal)
+                .constraints([
+                    ratatui::layout::Constraint::Percentage(50),
+                    ratatui::layout::Constraint::Percentage(50),
+                ])
+                .split(chunks[0]);
+
+            let bottom_chunks = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Horizontal)
+                .constraints([
+                    ratatui::layout::Constraint::Percentage(50),
+                    ratatui::layout::Constraint::Percentage(50),
+                ])
+                .split(chunks[1]);
 
             let min_day = usage_data.first().map(|(d, _)| *d as f64).unwrap_or(0.0);
             let max_day = usage_data.last().map(|(d, _)| *d as f64).unwrap_or(30.0);
 
-            let chart = Chart::new(datasets)
+            // Cost histogram (top-left)
+            let cost_dataset = vec![
+                Dataset::default()
+                    .name("Cost ($)")
+                    .marker(symbols::Marker::Block)
+                    .style(Style::default().fg(RatatuiColor::Green))
+                    .graph_type(GraphType::Line)
+                    .data(&cost_data),
+            ];
+
+            let cost_chart = Chart::new(cost_dataset)
                 .block(
                     Block::default()
-                        .title("Usage Statistics - Past Month")
+                        .title("💰 Daily Cost ($)")
                         .borders(Borders::ALL)
-                        .style(Style::default().fg(RatatuiColor::White)),
+                        .style(Style::default().fg(RatatuiColor::Green)),
                 )
                 .x_axis(
                     Axis::default()
@@ -135,23 +166,140 @@ impl UsageArgs {
                         .style(Style::default().fg(RatatuiColor::Gray))
                         .bounds([min_day, max_day])
                         .labels(vec![
-                            Span::styled(format!("{}", min_day as u32), Style::default().fg(RatatuiColor::Gray)),
-                            Span::styled(format!("{}", max_day as u32), Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled("30 Days Ago", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled("Today", Style::default().fg(RatatuiColor::Gray)),
                         ]),
                 )
                 .y_axis(
                     Axis::default()
-                        .title("Cost ($)")
+                        .title("$")
                         .style(Style::default().fg(RatatuiColor::Gray))
                         .bounds([0.0, max_cost * 1.1])
                         .labels(vec![
                             Span::styled("0.00", Style::default().fg(RatatuiColor::Gray)),
                             Span::styled(format!("{:.2}", max_cost), Style::default().fg(RatatuiColor::Gray)),
-                            // Span::styled(format!("{:.2}", max_energy), Style::default().fg(RatatuiColor::Gray)),
                         ]),
                 );
 
-            f.render_widget(chart, size);
+            // Energy histogram (top-right)
+            let energy_dataset = vec![
+                Dataset::default()
+                    .name("Energy (Wh)")
+                    .marker(symbols::Marker::Block)
+                    .style(Style::default().fg(RatatuiColor::Yellow))
+                    .graph_type(GraphType::Line)
+                    .data(&energy_data),
+            ];
+
+            let energy_chart = Chart::new(energy_dataset)
+                .block(
+                    Block::default()
+                        .title("⚡ Energy Used (Wh)")
+                        .borders(Borders::ALL)
+                        .style(Style::default().fg(RatatuiColor::Yellow)),
+                )
+                .x_axis(
+                    Axis::default()
+                        .title("Day")
+                        .style(Style::default().fg(RatatuiColor::Gray))
+                        .bounds([min_day, max_day])
+                        .labels(vec![
+                            Span::styled("30 Days Ago", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled("Today", Style::default().fg(RatatuiColor::Gray)),
+                        ]),
+                )
+                .y_axis(
+                    Axis::default()
+                        .title("Wh")
+                        .style(Style::default().fg(RatatuiColor::Gray))
+                        .bounds([0.0, max_energy * 1.1])
+                        .labels(vec![
+                            Span::styled("0.0", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled(format!("{:.1}", max_energy), Style::default().fg(RatatuiColor::Gray)),
+                        ]),
+                );
+
+            // CO2 histogram (bottom-left)
+            let co2_dataset = vec![
+                Dataset::default()
+                    .name("CO2 (g)")
+                    .marker(symbols::Marker::Block)
+                    .style(Style::default().fg(RatatuiColor::Red))
+                    .graph_type(GraphType::Line)
+                    .data(&co2_data),
+            ];
+
+            let co2_chart = Chart::new(co2_dataset)
+                .block(
+                    Block::default()
+                        .title("🌍 CO2 Emitted (g)")
+                        .borders(Borders::ALL)
+                        .style(Style::default().fg(RatatuiColor::Red)),
+                )
+                .x_axis(
+                    Axis::default()
+                        .title("Day")
+                        .style(Style::default().fg(RatatuiColor::Gray))
+                        .bounds([min_day, max_day])
+                        .labels(vec![
+                            Span::styled("30 Days Ago", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled("Today", Style::default().fg(RatatuiColor::Gray)),
+                        ]),
+                )
+                .y_axis(
+                    Axis::default()
+                        .title("g")
+                        .style(Style::default().fg(RatatuiColor::Gray))
+                        .bounds([0.0, max_co2 * 1.1])
+                        .labels(vec![
+                            Span::styled("0.0", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled(format!("{:.1}", max_co2), Style::default().fg(RatatuiColor::Gray)),
+                        ]),
+                );
+
+            // Water histogram (bottom-right)
+            let water_dataset = vec![
+                Dataset::default()
+                    .name("Water (mL)")
+                    .marker(symbols::Marker::Block)
+                    .style(Style::default().fg(RatatuiColor::Cyan))
+                    .graph_type(GraphType::Line)
+                    .data(&water_data),
+            ];
+
+            let water_chart = Chart::new(water_dataset)
+                .block(
+                    Block::default()
+                        .title("💧 Water Used (mL)")
+                        .borders(Borders::ALL)
+                        .style(Style::default().fg(RatatuiColor::Cyan)),
+                )
+                .x_axis(
+                    Axis::default()
+                        .title("Day")
+                        .style(Style::default().fg(RatatuiColor::Gray))
+                        .bounds([min_day, max_day])
+                        .labels(vec![
+                            Span::styled("30 Days Ago", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled("Today", Style::default().fg(RatatuiColor::Gray)),
+                        ]),
+                )
+                .y_axis(
+                    Axis::default()
+                        .title("mL")
+                        .style(Style::default().fg(RatatuiColor::Gray))
+                        .bounds([0.0, max_water * 1.1])
+                        .labels(vec![
+                            Span::styled("0.0", Style::default().fg(RatatuiColor::Gray)),
+                            Span::styled(format!("{:.1}", max_water), Style::default().fg(RatatuiColor::Gray)),
+                        ]),
+                );
+
+            // Render all four charts
+            f.render_widget(cost_chart, top_chunks[0]);
+            f.render_widget(energy_chart, top_chunks[1]);
+            f.render_widget(co2_chart, bottom_chunks[0]);
+            f.render_widget(water_chart, bottom_chunks[1]);
         });
 
         // Wait for user input to exit

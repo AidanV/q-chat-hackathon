@@ -2,12 +2,10 @@ pub mod settings;
 
 use std::ops::Deref;
 use std::path::Path;
-use std::str::{FromStr, Utf8Error};
-use std::sync::PoisonError;
+use std::{str::FromStr, sync::PoisonError};
 
 use aws_sdk_cognitoidentity::primitives::DateTimeFormat;
 use aws_sdk_cognitoidentity::types::Credentials;
-use chrono::{Datelike, Local};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::FromSql;
