@@ -119,7 +119,7 @@ impl ConversationState {
     }
 
     pub fn usage_summary(&self, os: &Os) -> UsageStatistics {
-        self.get_total_usage_stats(os)
+        self.get_today_usage_stats(os)
     }
 
     pub fn history(&self) -> &VecDeque<HistoryEntry> {
@@ -194,10 +194,36 @@ impl ConversationState {
     }
 
     pub fn get_last_usage_stats(&self) -> UsageStatistics {
-        return UsageStatistics::new(1., 0.1, 2.);
+        let cx_len = self.context_message_length.unwrap();
+
+        let p_len = self
+            .history()
+            .back()
+            .and_then(|entry| entry.user.prompt())
+            .map(|p| p.len())
+            .unwrap();
+
+        let tokens_per_character: f32 = 0.25;
+        let tokens = tokens_per_character * (cx_len + p_len) as f32;
+
+        return Self::get_usage_stats_from_tokens(tokens);
     }
 
-    pub fn get_total_usage_stats(&self, os: &Os) -> UsageStatistics {
+    pub fn get_usage_stats_from_tokens(tokens: f32) -> UsageStatistics {
+        let dollars_per_token = 15. / 1_000_000.;
+        let watthours_per_token = 0.001;
+        let co2_per_token = 0.4 * watthours_per_token;
+        let water_per_token = 1.8 * watthours_per_token;
+
+        let dollars = dollars_per_token * tokens;
+        let watthours = watthours_per_token * tokens;
+        let co2 = co2_per_token * tokens;
+        let water = water_per_token * tokens;
+
+        return UsageStatistics::new(dollars, watthours, co2, water);
+    }
+
+    pub fn get_today_usage_stats(&self, os: &Os) -> UsageStatistics {
         let day = Local::now().day();
         os.database.get_usage_by_date(day).unwrap().unwrap()
     }

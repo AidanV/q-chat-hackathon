@@ -163,24 +163,29 @@ impl UsageArgs {
             style::Print("█ Your prompts: "),
             style::SetForegroundColor(Color::Reset),
             style::Print(format!(
-                " ~{} tokens ({:.2}%)\n\n",
+                " ~{} tokens ({:.2}%)\n\n\n",
                 user_token_count,
                 (user_token_count.value() as f32 / CONTEXT_WINDOW_SIZE as f32) * 100.0
             )),
         )?;
 
-        let a = session.conversation.usage_summary(os);
+        let usage_summary = session.conversation.usage_summary(os);
 
         queue!(
             session.stderr,
             style::SetAttribute(Attribute::Bold),
-            style::Print("Resources used:\n"),
+            style::Print("Resources used today:\n"),
             style::SetAttribute(Attribute::Reset),
-            style::Print(format!("⚡ Energy used: \t{}Wh", a.watthours)),
+            style::Print(format!(
+                "💰 Total cost:  \t${}",
+                (usage_summary.dollars * 100.).round() / 100.
+            )),
             style::Print("\n"),
-            style::Print(format!("🌍 CO2 emited:  \t{}g", a.co2)),
+            style::Print(format!("⚡ Energy used: \t{} Wh", usage_summary.watthours)),
             style::Print("\n"),
-            style::Print(format!("💧 Water used:  \t{}oz", a.water)),
+            style::Print(format!("🌍 CO2 emited:  \t{} g", usage_summary.co2)),
+            style::Print("\n"),
+            style::Print(format!("💧 Water used:  \t{} mL", usage_summary.water)),
             style::Print("\n\n"),
         )?;
 
