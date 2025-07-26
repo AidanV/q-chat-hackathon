@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::Write;
 use std::sync::atomic::Ordering;
 
-use chrono::{Datelike, Local};
+use chrono::{Datelike, Local, NaiveDate};
 use crossterm::style::Color;
 use crossterm::{execute, style};
 use serde::{Deserialize, Serialize};
@@ -201,7 +201,7 @@ impl ConversationState {
             .back()
             .and_then(|entry| entry.user.prompt())
             .map(|p| p.len())
-            .unwrap();
+            .unwrap_or_default();
 
         let tokens_per_character: f32 = 0.25;
         let tokens = tokens_per_character * (cx_len + p_len) as f32;
@@ -224,8 +224,11 @@ impl ConversationState {
     }
 
     pub fn get_today_usage_stats(&self, os: &Os) -> UsageStatistics {
-        let day = Local::now().day();
-        os.database.get_usage_by_date(day).unwrap().unwrap()
+        let day = UsageStatistics::get_current_day();
+        os.database
+            .get_usage_by_date(day)
+            .unwrap_or_default()
+            .unwrap_or_default()
     }
 
     /// Sets the response message according to the currently set [Self::next_message].
@@ -247,7 +250,7 @@ impl ConversationState {
 
         let _ = os
             .database
-            .add_usage_by_date(Local::now().day(), &self.get_last_usage_stats());
+            .add_usage_by_date(UsageStatistics::get_current_day(), &self.get_last_usage_stats());
 
         if let Ok(cwd) = std::env::current_dir() {
             os.database.set_conversation_by_path(cwd, self).ok();

@@ -176,16 +176,13 @@ impl UsageArgs {
             style::SetAttribute(Attribute::Bold),
             style::Print("Resources used today:\n"),
             style::SetAttribute(Attribute::Reset),
-            style::Print(format!(
-                "💰 Total cost:  \t${}",
-                (usage_summary.dollars * 100.).round() / 100.
-            )),
+            style::Print(format!("💰 Total cost:  \t${:.2}", usage_summary.dollars)),
             style::Print("\n"),
-            style::Print(format!("⚡ Energy used: \t{} Wh", usage_summary.watthours)),
+            style::Print(format!("⚡ Energy used: \t{:.2} Wh", usage_summary.watthours)),
             style::Print("\n"),
-            style::Print(format!("🌍 CO2 emited:  \t{} g", usage_summary.co2)),
+            style::Print(format!("🌍 CO2 emited:  \t{:.2} g", usage_summary.co2)),
             style::Print("\n"),
-            style::Print(format!("💧 Water used:  \t{} mL", usage_summary.water)),
+            style::Print(format!("💧 Water used:  \t{:.2} mL", usage_summary.water)),
             style::Print("\n\n"),
         )?;
 

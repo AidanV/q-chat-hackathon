@@ -366,6 +366,26 @@ impl Database {
         self.get_json_entry(Table::Usages, day.to_string())
     }
 
+    pub fn get_usage_by_date_range(
+        &self,
+        start_day: u32,
+        end_day: u32,
+    ) -> Result<Vec<(u32, UsageStatistics)>, DatabaseError> {
+        let mut results = Vec::new();
+        for day in start_day..=end_day {
+            if let Some(usage) = self.get_usage_by_date(day)? {
+                results.push((day, usage));
+            }
+        }
+        Ok(results)
+    }
+
+    pub fn get_last_month_usage(&self) -> Result<Vec<(u32, UsageStatistics)>, DatabaseError> {
+        let today = UsageStatistics::get_current_day();
+        let start_day = if today >= 30 { today - 30 } else { 1 };
+        self.get_usage_by_date_range(start_day, today)
+    }
+
     pub async fn get_secret(&self, key: &str) -> Result<Option<Secret>, DatabaseError> {
         trace!(key, "getting secret");
         Ok(self.get_entry::<String>(Table::Auth, key)?.map(Into::into))

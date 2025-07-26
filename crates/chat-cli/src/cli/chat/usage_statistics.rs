@@ -1,5 +1,6 @@
 use std::ops::Add;
 
+use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +29,12 @@ impl UsageStatistics {
             co2,
             water,
         }
+    }
+
+    pub fn get_current_day() -> u32 {
+        let today = Local::now().date_naive();
+        let epoch_date = NaiveDate::from_ymd_opt(1970, 1, 1).unwrap();
+        today.signed_duration_since(epoch_date).num_days().abs() as u32
     }
 }
 
