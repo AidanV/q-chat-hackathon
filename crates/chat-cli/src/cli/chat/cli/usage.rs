@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand};
 use crossterm::style::{Attribute, Color};
 use crossterm::{execute, queue, style};
+use rand::Rng;
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -26,12 +27,15 @@ pub struct UsageArgs {
 pub enum UsageSubcommand {
     /// Display usage data for the past month as an aesthetically pleasing graph
     Graph,
+    /// Ask the AI model to provide a funny equivalent for one of your usage statistics
+    Summarize,
 }
 
 impl UsageArgs {
     pub async fn execute(self, os: &Os, session: &mut ChatSession) -> Result<ChatState, ChatError> {
         match self.command {
             Some(UsageSubcommand::Graph) => self.execute_graph(os, session).await,
+            Some(UsageSubcommand::Summarize) => self.execute_summarize(os, session).await,
             None => self.execute_default(os, session).await,
         }
     }
@@ -330,6 +334,56 @@ impl UsageArgs {
         Ok(())
     }
 
+    async fn execute_summarize(self, os: &Os, session: &mut ChatSession) -> Result<ChatState, ChatError> {
+        // Get today's usage statistics
+        let usage_summary = session.conversation.usage_summary(os);
+
+        // Select a field randomly from the available non-zero fields
+        let mut available_fields = Vec::new();
+
+        if usage_summary.dollars > 0.0 {
+            available_fields.push(("cost", usage_summary.dollars as f64, "dollars"));
+        }
+        if usage_summary.watthours > 0.0 {
+            available_fields.push(("energy", usage_summary.watthours as f64, "watt-hours"));
+        }
+        if usage_summary.co2 > 0.0 {
+            available_fields.push(("CO2 emissions", usage_summary.co2 as f64, "grams"));
+        }
+        if usage_summary.water > 0.0 {
+            available_fields.push(("water usage", usage_summary.water as f64, "milliliters"));
+        }
+
+        // If no usage data is available, inform the user
+        if available_fields.is_empty() {
+            execute!(
+                session.stderr,
+                style::SetForegroundColor(Color::Yellow),
+                style::Print(
+                    "No usage data available for today yet. Start chatting to generate some usage statistics!\n"
+                ),
+                style::SetForegroundColor(Color::Reset)
+            )?;
+            return Ok(ChatState::PromptUser {
+                skip_printing_tools: true,
+            });
+        }
+
+        // Randomly select one of the available fields
+        let mut rng = rand::rng();
+        let index = rng.random_range(0..available_fields.len());
+        let (field_name, field_value, field_unit) = available_fields[index];
+
+        // Create a humorous prompt for the AI
+        let prompt = format!(
+            "I've used {:.2} {} worth of {} today with Amazon Q. Can you give me a funny, creative, and relatable equivalent amount? For example, 'That's like buying X cups of coffee' or 'That's equivalent to Y bananas' or something similarly amusing and easy to visualize. Keep it light and fun! Start your answer by stating something along the lines of 'You've <correct verb> {:.2} {} worth of {} today with Amazon Q!' prioritize the sentence meaning over following this exactly.",
+            field_value, field_unit, field_name, field_value, field_unit, field_name
+        );
+
+        // Return a ChatState that will process this prompt as user input
+        Ok(ChatState::HandleInput { input: prompt })
+    }
+
     async fn execute_default(self, os: &Os, session: &mut ChatSession) -> Result<ChatState, ChatError> {
         let state = session
             .conversation
@@ -537,6 +591,7 @@ impl UsageArgs {
     pub fn subcommand_name(&self) -> Option<&'static str> {
         match &self.command {
             Some(UsageSubcommand::Graph) => Some("graph"),
+            Some(UsageSubcommand::Summarize) => Some("summarize"),
             None => None,
         }
     }
