@@ -1,5 +1,6 @@
 pub mod clear;
 pub mod compact;
+pub mod condense;
 pub mod context;
 pub mod editor;
 pub mod hooks;
@@ -16,6 +17,7 @@ pub mod usage;
 use clap::Parser;
 use clear::ClearArgs;
 use compact::CompactArgs;
+use condense::CondenseSubcommand;
 use context::ContextSubcommand;
 use editor::EditorArgs;
 use hooks::HooksArgs;
@@ -62,6 +64,9 @@ pub enum SlashCommand {
     PromptEditor(EditorArgs),
     /// Summarize the conversation to free up context space
     Compact(CompactArgs),
+    /// Enable or disable prompt compression to reduce energy consumption
+    #[command(subcommand)]
+    Condense(CondenseSubcommand),
     /// View and manage tools and permissions
     Tools(ToolsArgs),
     /// Create a new Github issue or make a feature request
@@ -94,6 +99,7 @@ impl SlashCommand {
             Self::Knowledge(subcommand) => subcommand.execute(os, session).await,
             Self::PromptEditor(args) => args.execute(session).await,
             Self::Compact(args) => args.execute(os, session).await,
+            Self::Condense(args) => args.execute(session).await,
             Self::Tools(args) => args.execute(session).await,
             Self::Issue(args) => {
                 if let Err(err) = args.execute(os).await {
@@ -132,6 +138,7 @@ impl SlashCommand {
             Self::Knowledge(_) => "knowledge",
             Self::PromptEditor(_) => "editor",
             Self::Compact(_) => "compact",
+            Self::Condense(_) => "condense",
             Self::Tools(_) => "tools",
             Self::Issue(_) => "issue",
             Self::Prompts(_) => "prompts",
@@ -155,6 +162,7 @@ impl SlashCommand {
             SlashCommand::Tools(arg) => arg.subcommand_name(),
             SlashCommand::Prompts(arg) => arg.subcommand_name(),
             SlashCommand::Usage(arg) => arg.subcommand_name(),
+            SlashCommand::Condense(sub) => Some(sub.name()),
             _ => None,
         }
     }

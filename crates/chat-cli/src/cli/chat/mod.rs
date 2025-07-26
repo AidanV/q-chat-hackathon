@@ -459,6 +459,8 @@ pub struct ChatSession {
     interactive: bool,
     inner: Option<ChatState>,
     ctrlc_rx: broadcast::Receiver<()>,
+    /// Whether prompt compression is enabled for this session
+    compression_enabled: bool,
 }
 
 impl ChatSession {
@@ -579,7 +581,18 @@ impl ChatSession {
             interactive,
             inner: Some(ChatState::default()),
             ctrlc_rx,
+            compression_enabled: false, // Default to disabled
         })
+    }
+
+    /// Set whether prompt compression is enabled for this session
+    pub fn set_compression_enabled(&mut self, enabled: bool) {
+        self.compression_enabled = enabled;
+    }
+
+    /// Get whether prompt compression is enabled for this session
+    pub fn is_compression_enabled(&self) -> bool {
+        self.compression_enabled
     }
 
     pub async fn next(&mut self, os: &mut Os) -> Result<(), ChatError> {
