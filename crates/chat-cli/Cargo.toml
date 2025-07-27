@@ -124,7 +124,7 @@ winnow.workspace = true
 schemars.workspace = true
 jsonschema.workspace = true
 chrono.workspace = true
-ratatui = "0.24"
+ratatui = "0.28"
 plotters = "0.3"
 plotters-backend = "0.3"
 
