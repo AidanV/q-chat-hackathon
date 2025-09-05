@@ -7,6 +7,7 @@ mod issue;
 mod mcp;
 mod settings;
 mod user;
+mod acp_agent;
 
 use std::fmt::Display;
 use std::io::{
@@ -121,6 +122,8 @@ pub enum RootSubcommand {
     /// Model Context Protocol (MCP)
     #[command(subcommand)]
     Mcp(McpSubcommand),
+    /// Agent Client Protocol (ACP)
+    Acp,
 }
 
 impl RootSubcommand {
@@ -164,6 +167,7 @@ impl RootSubcommand {
             Self::Version { changelog } => Cli::print_version(changelog),
             Self::Chat(args) => args.execute(os).await,
             Self::Mcp(args) => args.execute(os, &mut std::io::stderr()).await,
+            Self::Acp => acp_agent::agent(os).await,
         }
     }
 }
@@ -188,6 +192,7 @@ impl Display for RootSubcommand {
             Self::Issue(_) => "issue",
             Self::Version { .. } => "version",
             Self::Mcp(_) => "mcp",
+            Self::Acp => "acp"
         };
 
         write!(f, "{name}")
